@@ -40,6 +40,20 @@ class Settings(BaseSettings):
     # If empty, all users are allowed (default behavior)
     telegram_allowed_users: str = Field(default="", alias="TELEGRAM_ALLOWED_USERS")
     
+    # Repository Configuration
+    default_repo_url: str = Field(
+        default="https://github.com/user/repo", 
+        alias="DEFAULT_REPO_URL"
+    )
+    default_base_branch: str = Field(default="main", alias="DEFAULT_BASE_BRANCH")
+    
+    # Notification Settings
+    notification_user_id: str = Field(default="9504807", alias="NOTIFICATION_USER_ID")
+    telegram_notifications_enabled: bool = Field(
+        default=True, 
+        alias="TELEGRAM_NOTIFICATIONS_ENABLED"
+    )
+    
     model_config = {
         "env_file": ".env",
         "env_file_encoding": "utf-8",

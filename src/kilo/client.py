@@ -27,6 +27,8 @@ class KiloCloudClient:
         repo_url: str,
         task: str,
         agent_id: str = "build",
+        branch_name: str | None = None,
+        base_branch: str = "develop",
     ) -> dict[str, Any]:
         """
         Create a new Cloud Agent session.
@@ -35,6 +37,8 @@ class KiloCloudClient:
             repo_url: GitHub/GitLab repository URL
             task: Task description/prompt
             agent_id: Kilo agent ID (e.g., 'build', 'plan', 'ask')
+            branch_name: Optional custom branch name for the PR
+            base_branch: Base branch to create PR from (default: develop)
         
         Returns:
             Session info with ID and status
@@ -44,12 +48,20 @@ class KiloCloudClient:
                 "Cloud agent disabled, returning mock session",
                 repo=repo_url,
                 agent=agent_id,
+                branch=branch_name,
             )
             return {
                 "session_id": f"local-{hash(task) & 0xFFFFFFFF:08x}",
                 "status": "queued",
                 "mode": "local",
+                "branch": branch_name,
             }
+        
+        # Enhance prompt with branch and PR instructions
+        enhanced_task = task
+        if branch_name:
+            enhanced_task += f"\n\nCreate a new branch named '{branch_name}' for this work."
+        enhanced_task += f"\n\nWhen complete, create a pull request targeting the '{base_branch}' branch."
         
         async with httpx.AsyncClient() as client:
             try:
@@ -154,18 +166,27 @@ class AgentRouter:
         # Default repo if not provided
         repo = repo_url or self._get_repo_from_issue(issue_data)
         
+        # Generate branch name with Linear identifier for tracking
+        branch_name = self._generate_branch_name(issue_data)
+        base_branch = settings.default_base_branch
+        
         try:
             # Create Cloud Agent session
             session = await self.client.create_session(
                 repo_url=repo,
                 task=task_prompt,
                 agent_id=agent_id,
+                branch_name=branch_name,
+                base_branch=base_branch,
             )
             
             # Track the session
             self.active_sessions[session["session_id"]] = {
                 "agent_id": agent_id,
                 "issue": issue_data,
+                "branch": branch_name,
+                "base_branch": base_branch,
+                "repo": repo,
                 "created_at": "now",  # TODO: use proper timestamp
             }
             
@@ -208,10 +229,31 @@ class AgentRouter:
         return "\n\n".join(prompt_parts)
     
     def _get_repo_from_issue(self, issue_data: dict[str, Any]) -> str:
-        """Extract repository URL from issue data if available."""
-        # This could be configured per project/team
-        # For now, return a placeholder
-        return "https://github.com/user/repo"
+        """Get repository URL from settings."""
+        return settings.default_repo_url
+    
+    def _generate_branch_name(self, issue_data: dict[str, Any]) -> str:
+        """
+        Generate a branch name that includes Linear issue identifier.
+        Format: linear/TEAM-123-short-description
+        
+        This allows Linear to track the PR via branch name.
+        """
+        import re
+        
+        identifier = issue_data.get("identifier", "UNKNOWN")
+        title = issue_data.get("title", "")
+        
+        # Sanitize title for branch name
+        # Remove special chars, limit length, replace spaces with hyphens
+        safe_title = re.sub(r'[^\w\s-]', '', title.lower())
+        safe_title = re.sub(r'[-\s]+', '-', safe_title)
+        safe_title = safe_title.strip('-')[:30]  # Limit to 30 chars
+        
+        # Format: linear/TEAM-123-short-desc
+        branch_name = f"linear/{identifier.lower()}-{safe_title}"
+        
+        return branch_name
     
     def get_active_sessions(self) -> dict[str, dict]:
         """Get all active sessions."""

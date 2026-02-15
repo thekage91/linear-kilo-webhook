@@ -175,7 +175,18 @@ async def linear_webhook(request: Request) -> JSONResponse:
         
         # Send Telegram notification to Davide
         try:
-            await telegram_notifier.notify_issue_assigned(issue_data, agent_id)
+            # Get branch info from active sessions
+            session_id = submission["session"].get("session_id")
+            session_info = agent_router.active_sessions.get(session_id, {})
+            branch_name = session_info.get("branch")
+            repo = session_info.get("repo")
+            
+            await telegram_notifier.notify_issue_assigned(
+                issue_data, 
+                agent_id,
+                branch_name=branch_name,
+                repo=repo
+            )
             logger.info("Telegram notification sent", issue=issue_data.get("identifier"))
         except Exception as e:
             logger.error("Failed to send Telegram notification", error=str(e))
@@ -186,6 +197,7 @@ async def linear_webhook(request: Request) -> JSONResponse:
                 "agent_id": agent_id,
                 "session": submission["session"],
                 "issue": issue_data,
+                "branch": branch_name,
             },
             status_code=202,  # Accepted for processing
         )

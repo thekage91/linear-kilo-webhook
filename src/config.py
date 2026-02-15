@@ -35,6 +35,11 @@ class Settings(BaseSettings):
     # API key for admin endpoints
     admin_api_key: str | None = Field(default=None, alias="ADMIN_API_KEY")
     
+    # Telegram User Authorization
+    # Comma-separated list of allowed Telegram user IDs (e.g., "9504807,12345678")
+    # If empty, all users are allowed (default behavior)
+    telegram_allowed_users: str = Field(default="", alias="TELEGRAM_ALLOWED_USERS")
+    
     model_config = {
         "env_file": ".env",
         "env_file_encoding": "utf-8",

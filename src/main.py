@@ -10,6 +10,7 @@ from src.config import settings
 from src.utils.logger import configure_logging, get_logger
 from src.linear.webhook_handler import LinearWebhookHandler, TaskRouter
 from src.kilo.client import AgentRouter
+from src.utils.telegram_notifier import telegram_notifier
 
 # Configure logging
 configure_logging(debug=settings.debug)
@@ -171,6 +172,13 @@ async def linear_webhook(request: Request) -> JSONResponse:
             session_id=submission["session"].get("session_id"),
             agent=agent_id,
         )
+        
+        # Send Telegram notification to Davide
+        try:
+            await telegram_notifier.notify_issue_assigned(issue_data, agent_id)
+            logger.info("Telegram notification sent", issue=issue_data.get("identifier"))
+        except Exception as e:
+            logger.error("Failed to send Telegram notification", error=str(e))
         
         return JSONResponse(
             content={

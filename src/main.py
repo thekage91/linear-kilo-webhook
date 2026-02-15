@@ -3,7 +3,7 @@ FastAPI application for Linear → Kilo webhook service.
 """
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request, HTTPException, Depends
+from fastapi import FastAPI, Request, HTTPException, Depends, Header
 from fastapi.responses import JSONResponse
 
 from src.config import settings
@@ -22,6 +22,22 @@ task_router: TaskRouter | None = None
 agent_router: AgentRouter | None = None
 
 
+def verify_admin_auth(x_api_key: str | None = Header(None)):
+    """Verify admin API key for protected endpoints."""
+    if not settings.admin_api_key:
+        # If no admin key is configured, allow access (for development)
+        return True
+    
+    if not x_api_key:
+        raise HTTPException(status_code=401, detail="Missing X-API-Key header")
+    
+    import hmac
+    if not hmac.compare_digest(x_api_key, settings.admin_api_key):
+        raise HTTPException(status_code=403, detail="Invalid API key")
+    
+    return True
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan events."""
@@ -35,7 +51,8 @@ async def lifespan(app: FastAPI):
     )
     
     webhook_handler = LinearWebhookHandler(
-        webhook_secret=settings.linear_webhook_secret
+        webhook_secret=settings.linear_webhook_secret,
+        bearer_token=settings.webhook_bearer_token,
     )
     task_router = TaskRouter(agent_mapping=settings.agent_mapping)
     agent_router = AgentRouter()
@@ -97,7 +114,14 @@ async def linear_webhook(request: Request) -> JSONResponse:
     # Read raw body for signature verification
     body = await request.body()
     
-    # Verify webhook signature
+    # Verify Bearer token (if required or configured)
+    if settings.webhook_auth_required or settings.webhook_bearer_token:
+        is_token_valid = await webhook_handler.verify_bearer_token(request)
+        if not is_token_valid:
+            logger.warning("Bearer token verification failed")
+            raise HTTPException(status_code=401, detail="Invalid or missing bearer token")
+    
+    # Verify webhook signature (Linear HMAC)
     is_valid = await webhook_handler.verify_signature(request, body)
     if not is_valid:
         logger.warning("Webhook signature verification failed")
@@ -175,7 +199,7 @@ async def linear_webhook(request: Request) -> JSONResponse:
 
 
 @app.get("/sessions")
-async def list_sessions() -> dict:
+async def list_sessions(auth: bool = Depends(verify_admin_auth)) -> dict:
     """List all active Kilo Cloud Agent sessions."""
     if agent_router is None:
         raise HTTPException(status_code=503, detail="Service not initialized")
@@ -188,7 +212,7 @@ async def list_sessions() -> dict:
 
 
 @app.get("/sessions/{session_id}")
-async def get_session(session_id: str) -> dict:
+async def get_session(session_id: str, auth: bool = Depends(verify_admin_auth)) -> dict:
     """Get details of a specific Kilo Cloud Agent session."""
     if agent_router is None:
         raise HTTPException(status_code=503, detail="Service not initialized")
@@ -198,7 +222,7 @@ async def get_session(session_id: str) -> dict:
 
 
 @app.get("/config")
-async def get_config() -> dict:
+async def get_config(auth: bool = Depends(verify_admin_auth)) -> dict:
     """Get current service configuration (excludes secrets)."""
     return {
         "app_name": settings.app_name,
@@ -209,6 +233,9 @@ async def get_config() -> dict:
         "kilo_cloud_url": settings.kilo_cloud_url,
         "agent_mapping_count": len(settings.agent_mapping),
         "linear_configured": settings.linear_api_key is not None,
+        "webhook_auth_required": settings.webhook_auth_required,
+        "webhook_bearer_configured": settings.webhook_bearer_token is not None,
+        "admin_auth_configured": settings.admin_api_key is not None,
     }
 
 

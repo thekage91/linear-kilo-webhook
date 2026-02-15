@@ -27,6 +27,14 @@ class Settings(BaseSettings):
     # Format: {"linear_user_id": "kilo_agent_id", ...}
     agent_mapping: dict = Field(default_factory=dict, alias="AGENT_MAPPING")
     
+    # Authentication
+    # Bearer token for webhook endpoint (alternative/additional to Linear signature)
+    webhook_bearer_token: str | None = Field(default=None, alias="WEBHOOK_BEARER_TOKEN")
+    # Require authentication for webhook endpoint
+    webhook_auth_required: bool = Field(default=False, alias="WEBHOOK_AUTH_REQUIRED")
+    # API key for admin endpoints
+    admin_api_key: str | None = Field(default=None, alias="ADMIN_API_KEY")
+    
     model_config = {
         "env_file": ".env",
         "env_file_encoding": "utf-8",

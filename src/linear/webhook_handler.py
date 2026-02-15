@@ -15,10 +15,11 @@ logger = get_logger()
 
 
 class LinearWebhookHandler:
-    """Handler for Linear webhooks with HMAC verification."""
+    """Handler for Linear webhooks with HMAC and Bearer token verification."""
     
-    def __init__(self, webhook_secret: str | None = None):
+    def __init__(self, webhook_secret: str | None = None, bearer_token: str | None = None):
         self.webhook_secret = webhook_secret
+        self.bearer_token = bearer_token
     
     async def verify_signature(self, request: Request, body: bytes) -> bool:
         """Verify Linear webhook signature if secret is configured."""
@@ -39,6 +40,30 @@ class LinearWebhookHandler:
         
         if not hmac.compare_digest(signature, expected):
             logger.warning("Invalid webhook signature")
+            return False
+        
+        return True
+    
+    async def verify_bearer_token(self, request: Request) -> bool:
+        """Verify Bearer token if configured."""
+        if not self.bearer_token:
+            logger.debug("No bearer token configured, skipping verification")
+            return True
+        
+        auth_header = request.headers.get("authorization")
+        if not auth_header:
+            logger.warning("Missing Authorization header")
+            return False
+        
+        # Parse Bearer token
+        parts = auth_header.split()
+        if len(parts) != 2 or parts[0].lower() != "bearer":
+            logger.warning("Invalid Authorization header format")
+            return False
+        
+        token = parts[1]
+        if not hmac.compare_digest(token, self.bearer_token):
+            logger.warning("Invalid bearer token")
             return False
         
         return True

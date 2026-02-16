@@ -1,0 +1,22 @@
+{
+  "name": "linear-kilo-agent",
+  "description": "Linear AI Agent powered by Kilo.ai Gateway",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy --minify",
+    "cf-typegen": "wrangler types --env-interface CloudflareBindings",
+    "lint": "eslint src --ext .ts",
+    "lint:fix": "eslint src --ext .ts --fix"
+  },
+  "dependencies": {
+    "@linear/sdk": "^58.0.0",
+    "openai": "^4.85.4"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260214.0",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0",
+    "wrangler": "^4.25.0"
+  }
+}

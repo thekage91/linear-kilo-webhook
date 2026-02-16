@@ -1,167 +1,197 @@
-# Linear → Kilo Webhook Service
+# Linear Kilo Agent
 
-Servizio webhook che riceve task assegnati da Linear e li smista agli agenti Kilo Code.
+A Linear AI Agent powered by [Kilo.ai Gateway](https://kilo.ai/docs/gateway), built with TypeScript and deployed on Cloudflare Workers.
 
-## Architettura
+The agent can be mentioned or delegated issues in Linear. It processes requests through Kilo.ai's unified AI gateway — giving access to hundreds of models (Claude, GPT, Gemini, etc.) through a single API key.
+
+## Architecture
 
 ```
-Linear Webhook → FastAPI Server → Agent Router → Kilo Cloud Agent
+Linear Issue/Mention
+        │
+        ▼
+  AgentSession Webhook (signed)
+        │
+        ▼
+  Cloudflare Worker (src/index.ts)
+        │
+        ├─► OAuth token retrieval (KV)
+        │
+        ▼
+  AgentClient (src/lib/agent/agentClient.ts)
+        │
+        ├─► Builds conversation from previous activities
+        ├─► Calls Kilo.ai Gateway (OpenAI-compatible)
+        │
+        ▼
+  Agent Activities → Linear UI
 ```
 
-## Requisiti
+### Project Structure
 
-- Python 3.11+
-- Linear API Key (opzionale, per fetch aggiuntivi)
-- Linear Webhook Secret (opzionale, per verifica firma)
-- Kilo API Key (quando Kilo Cloud è abilitato)
+```
+src/
+├── index.ts                    # Cloudflare Worker entry point
+├── lib/
+│   ├── agent/
+│   │   ├── agentClient.ts      # Core agent logic + Kilo.ai integration
+│   │   └── prompt.ts           # System prompt
+│   ├── oauth.ts                # Linear OAuth2 flow (actor=app)
+│   └── types.ts                # TypeScript type definitions
+```
 
-## Installazione
+## Features
 
-### Metodo 1: Python locale
+- **Linear Agent Protocol**: Full implementation of Linear's Agent Session lifecycle (`created`, `prompted` events)
+- **Kilo.ai Gateway**: Uses the OpenAI-compatible API to access any model — swap models with a single config change
+- **OAuth2 with actor=app**: Proper agent installation flow as a Linear app user (not a personal token)
+- **Webhook Signature Verification**: Uses `@linear/sdk` webhook client for secure payload validation
+- **Token Auto-Refresh**: OAuth tokens are automatically refreshed before expiry
+- **Conversation History**: Reconstructs full conversation from Agent Activities for multi-turn interactions
+- **Cloudflare Workers**: Edge deployment with KV storage for OAuth tokens
+
+## Prerequisites
+
+- [Cloudflare account](https://dash.cloudflare.com/sign-up)
+- [Linear workspace](https://linear.app) with admin access
+- [Kilo.ai account](https://app.kilo.ai) with API key
+- Node.js 18+
+
+## Setup
+
+### 1. Clone and Install
 
 ```bash
-# Clona il repository
-git clone <repository-url>
-cd linear-kilo-webhook
-
-# Crea virtual environment
-python -m venv venv
-source venv/bin/activate  # Linux/Mac
-# oppure venv\Scripts\activate  # Windows
-
-# Installa dipendenze
-pip install -r requirements.txt
-
-# Configura
-cp .env.example .env
-# Modifica .env con le tue credenziali
-
-# Avvia
-uvicorn src.main:app --reload --port 8000
+git clone <repo-url>
+cd linear-kilo-agent
+npm install
 ```
 
-### Metodo 2: Docker
+### 2. Create a Linear OAuth Application
+
+1. Go to [Linear Settings > API > Applications > New](https://linear.app/settings/api/applications/new)
+2. Fill in:
+   - **Name**: `Kilo Agent` (this is how it appears in Linear)
+   - **Icon**: Upload an icon for the agent
+   - **Redirect URI**: `https://<your-worker-url>/oauth/callback`
+3. Enable **Webhooks** and set the endpoint to `https://<your-worker-url>/webhook`
+4. Under webhook categories, select **Agent session events**
+5. Copy the **Client ID**, **Client Secret**, and **Webhook Signing Secret**
+
+### 3. Get a Kilo.ai API Key
+
+1. Go to [Kilo.ai Dashboard](https://app.kilo.ai)
+2. Generate an API key
+3. Add credits if needed (or use free models)
+
+### 4. Configure Cloudflare
+
+Create a KV namespace for token storage:
 
 ```bash
-# Configura
-cp .env.example .env
-# Modifica .env con le tue credenziali
-
-# Avvia con Docker Compose
-docker-compose up -d
+npx wrangler kv namespace create "AGENT_TOKENS"
 ```
 
-## Configurazione
+Copy the ID and update `wrangler.jsonc`:
 
-Edita il file `.env`:
-
-```env
-# Linear
-LINEAR_WEBHOOK_SECRET=whsec_tuo_secret  # Opzionale, per verifica firma
-
-# Kilo (da configurare quando attivi Cloud Agent)
-KILO_CLOUD_ENABLED=false
-KILO_API_KEY=kilo_tuo_api_key
-
-# Agent Mapping
-AGENT_MAPPING={"davide@example.com": "build", "@example.com": "default-agent"}
-```
-
-## Endpoint Webhook
-
-### POST /webhook/linear
-
-Riceve eventi da Linear. Configura il webhook su Linear con questo URL.
-
-Headers richiesti:
-- `Content-Type: application/json`
-- `linear-signature: <hmac-signature>` (se LINEAR_WEBHOOK_SECRET è configurato)
-
-### GET /health
-
-Health check del servizio.
-
-### GET /ready
-
-Readiness check per orchestratori (Kubernetes, etc.).
-
-### GET /sessions
-
-Lista le sessioni Kilo Cloud Agent attive.
-
-### GET /sessions/{session_id}
-
-Dettagli di una specifica sessione.
-
-## Configurazione Linear
-
-1. Vai su Linear → Settings → API → Webhooks
-2. Crea un nuovo webhook
-3. URL: `https://tuo-server.com/webhook/linear`
-4. Seleziona gli eventi: `Issue` (create, update)
-5. Copia il Webhook Secret e mettilo in `.env`
-
-## Agent Mapping
-
-Mappa gli utenti Linear agli agenti Kilo:
-
-```json
+```jsonc
 {
-  "davide@example.com": "build",
-  "marco@example.com": "plan",
-  "@example.com": "default-agent"
+  "kv_namespaces": [
+    {
+      "binding": "AGENT_TOKENS",
+      "id": "<your-kv-namespace-id>"
+    }
+  ],
+  "vars": {
+    "LINEAR_CLIENT_ID": "<your-linear-client-id>",
+    "WORKER_URL": "https://<your-worker>.workers.dev",
+    "KILO_MODEL": "anthropic/claude-sonnet-4-20250514"
+  }
 }
 ```
 
-- Mapping diretto per email
-- Mapping per dominio con `@dominio.com`
-- `default` come fallback
-
-## Flusso di lavoro
-
-1. Un issue viene assegnato su Linear
-2. Linear invia webhook al servizio
-3. Il servizio verifica la firma (se configurata)
-4. Il Task Router identifica l'agente dal mapping
-5. Il task viene inviato al Kilo Cloud Agent (o accodato se disabilitato)
-6. La sessione viene tracciata e resa disponibile via API
-
-## Sviluppo
+Set secrets via Wrangler:
 
 ```bash
-# Installa dipendenze dev
-pip install pytest pytest-asyncio httpx
-
-# Run tests
-pytest tests/
-
-# Run con reload
-uvicorn src.main:app --reload
+npx wrangler secret put LINEAR_CLIENT_SECRET
+npx wrangler secret put LINEAR_WEBHOOK_SECRET
+npx wrangler secret put KILO_API_KEY
 ```
 
-## Struttura Progetto
+### 5. Deploy
 
-```
-linear-kilo-webhook/
-├── src/
-│   ├── main.py              # FastAPI app
-│   ├── config.py            # Configurazione
-│   ├── linear/              # Modelli e handler Linear
-│   ├── kilo/                # Client Kilo Cloud
-│   └── utils/               # Utility
-├── tests/                   # Test
-├── Dockerfile
-├── docker-compose.yml
-├── requirements.txt
-└── .env.example
+```bash
+npm run deploy
 ```
 
-## Stato Cloud Agent
+### 6. Install the Agent in Linear
 
-Attualmente il servizio è configurato per:
-- ✅ Ricevere webhook da Linear
-- ✅ Verificare firme HMAC
-- ✅ Smistare task agli agenti configurati
-- ⚠️ Inviare a Kilo Cloud Agent (richiede KILO_API_KEY)
+Visit `https://<your-worker-url>/oauth/authorize` in your browser. This initiates the OAuth flow and installs the agent in your Linear workspace.
 
-Quando `KILO_CLOUD_ENABLED=true` e `KILO_API_KEY` è configurato, i task verranno automaticamente inviati ai Cloud Agent di Kilo.
+## Usage
+
+Once installed, the agent appears as a workspace member in Linear:
+
+- **Delegate an issue**: Assign the issue to `Kilo Agent` — the agent will analyze the issue and respond
+- **@mention in a comment**: Write `@Kilo Agent` in any issue comment to ask a question or request help
+- **Follow-up prompts**: Reply in the same thread to continue the conversation
+
+## Model Configuration
+
+Change the model by updating `KILO_MODEL` in `wrangler.jsonc`:
+
+| Model | ID |
+|---|---|
+| Claude Sonnet 4 | `anthropic/claude-sonnet-4-20250514` |
+| GPT-4o | `openai/gpt-4o` |
+| Gemini 2.5 Pro | `google/gemini-2.5-pro` |
+| Auto (best for task) | `kilo/auto` |
+
+See the full list at [Kilo.ai Models & Providers](https://kilo.ai/docs/gateway/models-and-providers).
+
+## Development
+
+### Local Development
+
+```bash
+npm run dev
+```
+
+This starts a local Wrangler dev server. Use a tunnel (e.g., `cloudflared tunnel`) to expose it to Linear's webhooks during development.
+
+### Type Checking
+
+```bash
+npx tsc --noEmit
+```
+
+## API Endpoints
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/` | GET | Health check |
+| `/oauth/authorize` | GET | Start OAuth installation flow |
+| `/oauth/callback` | GET | OAuth callback handler |
+| `/webhook` | POST | Linear webhook receiver |
+
+## How It Works
+
+1. **Installation**: A workspace admin visits `/oauth/authorize`, which redirects to Linear's OAuth page with `actor=app` and `app:assignable,app:mentionable` scopes. After approval, the callback stores the OAuth token in Cloudflare KV.
+
+2. **Webhook Reception**: When a user mentions or delegates an issue to the agent, Linear sends an `AgentSessionEvent` webhook. The worker validates the signature using the Linear SDK.
+
+3. **Agent Loop**: The `AgentClient` immediately sends a `thought` activity (required within 10 seconds), then builds the conversation context from the webhook payload and previous activities. It calls the Kilo.ai gateway and maps the LLM response to Linear Agent Activity types.
+
+4. **Response Delivery**: The agent's response appears as an Agent Activity in the Linear issue, visible to all team members.
+
+## References
+
+- [Linear Agents Documentation](https://linear.app/docs/agents-in-linear)
+- [Linear Developer Docs — Agent Interaction](https://linear.app/developers/agent-interaction)
+- [Linear Weather Bot (reference implementation)](https://github.com/linear/weather-bot)
+- [Kilo.ai Gateway Documentation](https://kilo.ai/docs/gateway)
+- [Kilo.ai API Reference](https://kilo.ai/docs/gateway/api-reference)
+
+## License
+
+MIT

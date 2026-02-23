@@ -1,7 +1,7 @@
 import OpenAI from "openai";
 import { LinearClient, LinearDocument as L } from "@linear/sdk";
 import type { ChatCompletionMessageParam } from "openai/resources/index";
-import { SYSTEM_PROMPT } from "./prompt";
+import { getPromptByMode } from "./prompt";
 import { Content, UnreachableCaseError } from "../types";
 
 const KILO_BASE_URL = "https://api.kilo.ai/api/gateway";
@@ -17,8 +17,14 @@ export class AgentClient {
   private linearClient: LinearClient;
   private kilo: OpenAI;
   private model: string;
+  private systemPrompt: string;
 
-  constructor(linearAccessToken: string, kiloApiKey: string, model: string) {
+  constructor(
+    linearAccessToken: string,
+    kiloApiKey: string,
+    model: string,
+    promptMode: string = "general"
+  ) {
     this.linearClient = new LinearClient({
       accessToken: linearAccessToken,
     });
@@ -30,6 +36,7 @@ export class AgentClient {
     });
 
     this.model = model;
+    this.systemPrompt = getPromptByMode(promptMode);
   }
 
   /**
@@ -55,7 +62,7 @@ export class AgentClient {
       await this.generateMessagesFromPreviousActivities(agentSessionId);
 
     const messages: ChatCompletionMessageParam[] = [
-      { role: "system", content: SYSTEM_PROMPT },
+      { role: "system", content: this.systemPrompt },
     ];
 
     // Include the prompt context (issue details, guidance, etc.) if available

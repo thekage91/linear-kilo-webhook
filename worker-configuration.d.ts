@@ -8,6 +8,11 @@ interface Env {
   KILO_API_KEY: string;
   KILO_MODEL: string;
 
+  // Agent configuration
+  // "general" — general-purpose assistant
+  // "backend-developer" — Senior Java/Quarkus backend developer
+  AGENT_PROMPT_MODE: string;
+
   // Worker
   WORKER_URL: string;
 

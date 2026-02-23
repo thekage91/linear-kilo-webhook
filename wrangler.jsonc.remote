@@ -21,8 +21,7 @@
 	},
 	"vars": {
 		"LINEAR_CLIENT_ID": "d81795be2cdcfd4983d64a37024d7750",
-		"WORKER_URL": "https://fa7b-2-39-113-181.ngrok-free.app",
-		"KILO_MODEL": "z-ai/glm-5:free",
-		"AGENT_PROMPT_MODE": "backend-developer"
+		"WORKER_URL": "https://linear-kilo-agent.kilo-agent.workers.dev/",
+		"KILO_MODEL": "z-ai/glm-5:free"
 	}
 }

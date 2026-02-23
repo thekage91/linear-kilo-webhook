@@ -12,17 +12,22 @@ function getWorkspaceTokenKey(workspaceId: string): string {
  */
 export function handleOAuthAuthorize(request: Request, env: Env): Response {
   const scope = "read,write,app:assignable,app:mentionable";
+  const baseUrl = env.WORKER_URL.replace(/\/+$/, "");
+  const redirectUri = `${baseUrl}/oauth/callback`;
 
-  const authUrl = new URL("https://linear.app/oauth/authorize");
-  authUrl.searchParams.set("client_id", env.LINEAR_CLIENT_ID);
-  authUrl.searchParams.set("redirect_uri", `${env.WORKER_URL}/oauth/callback`);
-  authUrl.searchParams.set("response_type", "code");
-  authUrl.searchParams.set("scope", scope);
-  authUrl.searchParams.set("actor", "app");
+  const params = new URLSearchParams({
+    client_id: env.LINEAR_CLIENT_ID,
+    redirect_uri: redirectUri,
+    response_type: "code",
+    scope,
+    actor: "app",
+  });
+
+  const authUrl = `https://linear.app/oauth/authorize?${params.toString()}`;
 
   return new Response(null, {
     status: 302,
-    headers: { Location: authUrl.toString() },
+    headers: { Location: authUrl },
   });
 }
 
@@ -47,6 +52,7 @@ export async function handleOAuthCallback(
   }
 
   try {
+    const baseUrl = env.WORKER_URL.replace(/\/+$/, "");
     const tokenResponse = await fetch("https://api.linear.app/oauth/token", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -55,7 +61,7 @@ export async function handleOAuthCallback(
         client_id: env.LINEAR_CLIENT_ID,
         client_secret: env.LINEAR_CLIENT_SECRET,
         code,
-        redirect_uri: `${env.WORKER_URL}/oauth/callback`,
+        redirect_uri: `${baseUrl}/oauth/callback`,
       }),
     });
 

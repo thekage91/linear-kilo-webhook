@@ -104,7 +104,8 @@ export default {
     }
 
     const model = env.KILO_MODEL || "anthropic/claude-sonnet-4-20250514";
-    const agentClient = new AgentClient(token, env.KILO_API_KEY, model);
+    const promptMode = env.AGENT_PROMPT_MODE || "general";
+    const agentClient = new AgentClient(token, env.KILO_API_KEY, model, promptMode);
     const agentSessionId = webhook.agentSession.id;
 
     const action = webhook.action;

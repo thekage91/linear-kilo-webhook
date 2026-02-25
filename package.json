@@ -10,6 +10,7 @@
     "lint:fix": "eslint src --ext .ts --fix"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.78.0",
     "@linear/sdk": "^58.0.0",
     "openai": "^4.85.4"
   },

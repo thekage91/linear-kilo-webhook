@@ -22,7 +22,17 @@
 	"vars": {
 		"LINEAR_CLIENT_ID": "d81795be2cdcfd4983d64a37024d7750",
 		"WORKER_URL": "https://fa7b-2-39-113-181.ngrok-free.app",
+
+		// Kilo agent configuration (AGENT_TYPE=kilo)
 		"KILO_MODEL": "z-ai/glm-5:free",
-		"AGENT_PROMPT_MODE": "backend-developer"
+		"AGENT_PROMPT_MODE": "backend-developer",
+
+		// Agent type: "kilo" (default) or "claude-code"
+		// Set to "claude-code" to activate the Claude Code agent (requires ANTHROPIC_API_KEY secret)
+		"AGENT_TYPE": "kilo",
+
+		// Claude Code agent configuration (AGENT_TYPE=claude-code)
+		// Use claude-sonnet-4-5-20251022 for faster/cheaper, claude-opus-4-5-20251101 for best quality
+		"CLAUDE_MODEL": "claude-sonnet-4-5-20251022"
 	}
 }
